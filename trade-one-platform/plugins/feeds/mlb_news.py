@@ -43,12 +43,19 @@ def _fetch(url: str, timeout: int = 30) -> bytes | None:
         return None
 
 
+class RSSParseError(Exception):
+    """RSS body could not be parsed. Distinct from 'RSS was valid but had zero
+    items'. Rule-4: don't substitute [] for a parse failure — raise so the
+    per-feed caller can decide to skip this cycle vs abort.
+    """
+
+
 def _parse_rss_items(xml_bytes: bytes) -> list[dict]:
     try:
         root = ET.fromstring(xml_bytes)
     except ET.ParseError as e:
         log.error(f"RSS parse failed: {e!r}")
-        return []
+        raise RSSParseError(str(e)) from e
     ns = {"atom": "http://www.w3.org/2005/Atom",
           "dc": "http://purl.org/dc/elements/1.1/",
           "content": "http://purl.org/rss/1.0/modules/content/"}
@@ -143,7 +150,12 @@ class MlbNewsFeed(FeedAdapter):
             raw = _fetch(src_url)
             if not raw:
                 continue
-            items = _parse_rss_items(raw)
+            try:
+                items = _parse_rss_items(raw)
+            except RSSParseError:
+                # Already ERROR-logged inside _parse_rss_items; skip THIS source
+                # for this poll cycle, other sources retain a fresh attempt.
+                continue
             for it in items:
                 key = _dedup_key(src_id, it["title"], it["link"])
                 if key in seen:

@@ -5,6 +5,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+
+class InsufficientTrainingData(Exception):
+    """A trainer refused to fit because the labeled sample was too small to
+    produce a real model. Rule-4: never return an empty-shaped model that
+    downstream code will treat as trained. The caller decides whether to
+    defer, retry after more data lands, or abort the training run.
+    """
+
 import joblib
 import numpy as np
 import pandas as pd
@@ -82,7 +90,20 @@ class IntelligenceTrainer:
             "brier": float(brier_score_loss(scored_y, probabilities)),
             "roc_auc": float(roc_auc_score(scored_y, probabilities)) if len(np.unique(scored_y)) > 1 else 0.5,
         }
-        quantiles = self._train_quantiles(frame)
+        # Rule-4: quantile trainer raises InsufficientTrainingData when it can't
+        # produce a real model. Caller must decide — here we skip quantile models
+        # entirely (bundle still ships with empty quantile_models dict, which
+        # downstream code MUST treat as "no floor/median/ceiling available", not
+        # as "trained on zero rows").
+        try:
+            quantiles = self._train_quantiles(frame)
+        except InsufficientTrainingData as e:
+            # Explicit ERROR log so operators see quantile absence, not silent skip.
+            import logging as _l
+            _l.getLogger(__name__).error(
+                "quantile training skipped for this bundle: %s — downstream sim tiles will be omitted", e,
+            )
+            quantiles = {}
         bundle = ModelBundle(
             experts=experts, meta_model=calibrated, quantile_models=quantiles,
             feature_columns=list(frame.columns), text_column="text_blob",
@@ -148,8 +169,14 @@ class IntelligenceTrainer:
 
     def _train_quantiles(self, frame: pd.DataFrame) -> dict[str, object]:
         labeled = frame[frame["actual_value"].notna()]
+        # Rule-4: insufficient training data is a real absence, not a "training
+        # succeeded with an empty model." Returning {} lets downstream code
+        # believe it has a trained quantile set when it does not. Raise so the
+        # caller must decide to skip or defer training.
         if len(labeled) < 30:
-            return {}
+            raise InsufficientTrainingData(
+                f"_train_quantiles: only {len(labeled)} labeled rows (need >= 30)"
+            )
         columns = [c for c in frame if c.startswith(("num__", "inc__", "txtsig__", "temporal__"))] + ["line", "over_odds", "under_odds", "hours_to_event"]
         X = labeled[columns].apply(pd.to_numeric, errors="coerce").fillna(0)
         y = labeled["actual_value"].astype(float)

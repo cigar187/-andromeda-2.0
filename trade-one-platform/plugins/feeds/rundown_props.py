@@ -180,6 +180,14 @@ def _coerce_int_keys(d: Mapping[Any, Any]) -> dict[int, Any]:
     return out
 
 
+class FeedFetchError(Exception):
+    """Rundown fetch failed (network / rate-limit / bad key). Distinct from
+    'vendor returned zero events' — the caller must decide whether to skip
+    this market and continue, or abort the poll entirely. Rule-4: never
+    substitute empty [] for an unknown outcome.
+    """
+
+
 class RundownPropsFeed(FeedAdapter):
     def __init__(self, settings: Mapping[str, Any]) -> None:
         self.sports = [s.lower() for s in settings.get("sports", ["mlb"])]
@@ -301,14 +309,28 @@ class RundownPropsFeed(FeedAdapter):
         payload = self._get_json(
             f"/sports/{sport_id}/events/{today}", key, params=params,
         )
+        # Rule-4: a None payload means the HTTP fetch failed (network / rate-limit /
+        # bad key — the underlying _get_json already logged the specific cause).
+        # NEVER substitute an empty [] for a failed fetch — that's fabrication of
+        # "vendor said zero events". Raise so the per-market caller can decide.
         if payload is None:
-            return []
+            raise FeedFetchError(
+                f"rundown fetch failed: sport_id={sport_id} market_id={market_id} date={today}"
+            )
         return payload.get("events", []) if isinstance(payload, dict) else (payload or [])
 
     def _emit_for_market(self, sport_slug: str, sport_id: int, market_id: int, key: str) -> dict[str, int]:
-        events = self._fetch_events(sport_id, market_id, key)
         counts = {"prop_snapshot": 0, "money_move_snapshot": 0, "raw_line_preserved": 0,
                   "raw_market_preserved": 0, "raw_affiliate_preserved": 0}
+        try:
+            events = self._fetch_events(sport_id, market_id, key)
+        except FeedFetchError as fe:
+            # Fetch failed for this (sport, market) — log and skip this ONE market.
+            # Other markets in the poll retain a fresh attempt. Distinct log tag
+            # (FEED_FETCH_FAILED) so ops can grep separately from the "0 events
+            # returned" case below.
+            log.error(f"FEED_FETCH_FAILED sport={sport_slug} sport_id={sport_id} market_id={market_id}: {fe}")
+            return counts
         if not events:
             log.error(f"sport={sport_slug} market_id={market_id}: 0 events")
             return counts

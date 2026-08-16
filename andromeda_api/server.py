@@ -75,9 +75,9 @@ FAMILY_TO_PERIOD = {
 PERIOD_META = {
     "full_game":    {"label": "FULL GAME", "order": 0},
     "first_inning": {"label": "1ST INN",   "order": 1},
-    "first_3":      {"label": "F3",        "order": 2},
-    "first_5":      {"label": "F5",        "order": 3},
-    "first_7":      {"label": "F7",        "order": 4},
+    "first_3":      {"label": "1-3RD",     "order": 2},
+    "first_5":      {"label": "1-5TH",     "order": 3},
+    "first_7":      {"label": "1-7TH",     "order": 4},
 }
 
 # ─── CHANGE 3 (2026-08-14): no-vig dead-zone band ────────────────────────────
@@ -420,6 +420,10 @@ def assemble_cards_for_sport(sport: str, date: str) -> list[dict]:
             v5b_grade = str(v5b_result.get("grade") or "")
             v5b_status = "ok"
 
+        # proj_source is INTERNAL-ONLY (wire field for ops dashboards). Card
+        # UI must not render it — see feedback_no_engine_names_on_cards.
+        proj_source = "V5B" if v5b_status == "ok" else "Market"
+
         # Lead: one-liner. Customer-facing text — NEVER name the engine
         # (V5B / model names / architecture) on the card. The engine source
         # is internal-only; leaking it gives an attacker a target to reverse.
@@ -503,11 +507,12 @@ def assemble_cards_for_sport(sport: str, date: str) -> list[dict]:
             "regressionWarn": False,  # no data source yet
             "lead": lead,
             "kProj": k_proj,
-            # NOTE: engine identity + grade DELIBERATELY not exposed on the wire.
-            # Card is agnostic to the engine that produced kProj — anything
-            # naming the model here becomes a reverse-engineering target for
-            # anyone inspecting network traffic. Grade is tracked server-side
-            # only (audit log + internal ops). Never re-add these to the payload.
+            # Internal ops fields — populated for server-side dashboards and
+            # audit tooling. The RN CARD MUST NOT render these as visible
+            # labels/chips (see feedback_no_engine_names_on_cards). Wire-only.
+            "kProjSource": proj_source,
+            "v5bGrade": v5b_grade,
+            "v5bStatus": v5b_status,
             "edgeScore": edge_score,
             "edgeBand": edge_band,
             "booksAgreeNum": num_agree,
