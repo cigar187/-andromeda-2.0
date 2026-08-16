@@ -28,6 +28,27 @@ from pathlib import Path
 EVENT_LOG_ROOT = Path("/opt/trade-one/data/events")
 LOG = logging.getLogger("andromeda_api")
 
+# V5B live wiring — added 2026-08-16. Cards that carry a pitcher name now source
+# k_projected + grade from V5B (sbc_engine_v5) when the pitcher has a real profile
+# + >=5 prior starts. Rule-4: pitchers V5B can't compute for get their card DROPPED
+# with an ERROR log. No market-derived fallback for pitcher props.
+#
+# Both /opt/trade-one and /opt/trade-one/TradeOnePackage_ported hold sbc_engine_v5;
+# _load_v5b() below shields the whole wiring so server.py boots even if the imports
+# fail — in which case pitcher cards fall through to a legacy market kProj and
+# every card is stamped v5b_status="engine_offline" so the failure is visible.
+sys.path.insert(0, "/opt/trade-one/TradeOnePackage_ported")
+sys.path.insert(0, "/opt/trade-one")
+V5B_AVAILABLE = False
+V5B_LOAD_ERROR: str | None = None
+try:
+    from sbc_v5_cwc_wrapper import v5b_result_for_pitcher_night  # noqa: E402
+    from v5b_store import get_store as _v5b_get_store, resolve_pitcher as _v5b_resolve_pitcher  # noqa: E402
+    V5B_AVAILABLE = True
+except Exception as _e:
+    V5B_LOAD_ERROR = f"{type(_e).__name__}: {_e}"
+    LOG.error("V5B wiring unavailable: %s — pitcher cards will fall back to market kProj (visible as v5b_status='engine_offline')", V5B_LOAD_ERROR)
+
 MONEY_MOVE_BOOKS = {"draftkings", "betmgm", "hardrock", "fanduel"}
 PINNACLE_BOOK = "pinnacle"
 
@@ -356,14 +377,54 @@ def assemble_cards_for_sport(sport: str, date: str) -> list[dict]:
             continue
         # (team_str + team_match_level computed above by _resolve_team)
 
-        # kProj — market-inferred estimate (line + small nudge from no-vig).
-        # NOT a real engine projection. Labeled as "market" in sub-text.
-        k_proj = round(line + (no_vig_over - 0.5) * 2.0, 2)
+        # kProj — real V5B projection when we can compute it; market-inferred
+        # nudge only as an "engine_offline" bridge. Rule-4: for PITCHER-family
+        # markets, if V5B is available and can't compute for this pitcher
+        # (missing profile / insufficient history / abstention), the CARD IS
+        # DROPPED with an ERROR log — no market-derived fallback.
+        family_p = (payload.get("market_family") or "")
+        is_pitcher_market = family_p.startswith("pitcher_")
+
+        market_k_proj = round(line + (no_vig_over - 0.5) * 2.0, 2)
+        k_proj = market_k_proj
+        v5b_grade: str | None = None
+        v5b_status = "engine_offline" if not V5B_AVAILABLE else "not_applicable"
+
+        if V5B_AVAILABLE and is_pitcher_market:
+            pname = payload.get("participant_name")
+            mlbam = _v5b_resolve_pitcher(pname)
+            game_date_iso = (payload.get("event_start") or "")[:10]
+            if not mlbam:
+                LOG.error(
+                    "v5b_drop: no MLBAM match for participant_name=%r event=%s line=%s side=%s (Rule-4 — dropping pitcher card)",
+                    pname, payload.get("event_id"), line, direction,
+                )
+                continue
+            try:
+                v5b_result = v5b_result_for_pitcher_night(
+                    _v5b_get_store(), mlbam, game_date_iso, float(line),
+                )
+            except ValueError as ve:
+                LOG.error(
+                    "v5b_drop: input-guard failure for %s (%s) on %s — %s (Rule-4 — dropping pitcher card)",
+                    pname, mlbam, game_date_iso, ve,
+                )
+                continue
+            if v5b_result is None:
+                LOG.error(
+                    "v5b_drop: V5B abstained for %s (%s) on %s (Rule-4 — dropping pitcher card)",
+                    pname, mlbam, game_date_iso,
+                )
+                continue
+            k_proj = round(float(v5b_result["k_projected"]), 2)
+            v5b_grade = str(v5b_result.get("grade") or "")
+            v5b_status = "ok"
 
         # Lead: one-liner
+        proj_source = "V5B" if v5b_status == "ok" else "Market"
         lead = (
             f"Pinnacle no-vig **{side_prob:.0%}** on the {direction}. "
-            f"Market-inferred projection **{k_proj:.2f}** vs line {line}."
+            f"{proj_source} projection **{k_proj:.2f}** vs line {line}."
         )
         # Brief: expandable plain-English. Customer-facing text ONLY — no engine
         # names, no model names, no internal architecture references. Describes
@@ -441,6 +502,9 @@ def assemble_cards_for_sport(sport: str, date: str) -> list[dict]:
             "regressionWarn": False,  # no data source yet
             "lead": lead,
             "kProj": k_proj,
+            "kProjSource": proj_source,      # "V5B" | "Market"
+            "v5bGrade": v5b_grade,           # A+ / A / B / C / D  (None when v5bStatus != "ok")
+            "v5bStatus": v5b_status,         # "ok" | "not_applicable" | "engine_offline"
             "edgeScore": edge_score,
             "edgeBand": edge_band,
             "booksAgreeNum": num_agree,

@@ -37,7 +37,13 @@ from typing import Any
 import sbc_engine_v5
 from sbc_engine_v5 import CALIBRATION_LABEL, run_sbc_v5_for_pitcher_night
 
-from trade_one.contracts import EngineDistribution
+# EngineDistribution is only needed by callers that want a discretized distribution
+# (v5b_result_to_distribution / v5b_for_pitcher_night / v5b_for_pitcher_night_full).
+# Import lazily so lightweight callers (server.py, dashboards) that only need the
+# raw V5B result dict don't need trade_one on their sys.path.
+def _EngineDistribution():
+    from trade_one.contracts import EngineDistribution as _ED
+    return _ED
 
 log = logging.getLogger("sbc_v5_cwc_wrapper")
 
@@ -94,7 +100,7 @@ def discretize_normal(mean: float, std: float,
 
 
 def v5b_result_to_distribution(v5b_result: dict[str, Any] | None,
-                               correlation_id: str | None = None) -> EngineDistribution | None:
+                               correlation_id: str | None = None):
     """Convert one V5B result dict into an EngineDistribution over pitcher-K support [0..20].
 
     v5b_result is either the dict returned by run_sbc_v5_for_pitcher_night, or None (no-call).
@@ -109,6 +115,7 @@ def v5b_result_to_distribution(v5b_result: dict[str, Any] | None,
     k_projected = float(v5b_result["k_projected"])
     std = float(v5b_result["std"])
     probs = discretize_normal(k_projected, std)
+    EngineDistribution = _EngineDistribution()
     dist = EngineDistribution(
         engine_id=ENGINE_ID,
         engine_version=ENGINE_VERSION,
@@ -148,11 +155,21 @@ def _validate_v5b_inputs(store: dict[str, Any], pitcher_id: Any, game_date: Any)
         raise ValueError(msg)
     history = store.get("history") if isinstance(store, dict) else None
     hist_rows = history.get(pitcher_id, []) if isinstance(history, dict) else []
+    # V5B expects history entries as tuples (date, k, ip, pc) — see sbc_engine_v5:200,219.
+    # Accept both shapes here so callers who build a dict-shaped store still get a
+    # sensible pre-flight error rather than a confusing tuple-unpack downstream.
+    def _row_date(r):
+        if isinstance(r, dict):
+            return r.get("game_date")
+        try:
+            return r[0]
+        except (TypeError, IndexError):
+            return None
     # V5B's own MIN_STARTS_FOR_STD is 5 (sbc_engine_v5.py:236). Below it, V5B substitutes
     # DEFAULT_STD=2.2. Wrapper refuses rather than allow that substitution.
     prior_starts = sum(
         1 for r in hist_rows
-        if r.get("game_date") is not None and str(r["game_date"]) < str(game_date)
+        if _row_date(r) is not None and str(_row_date(r)) < str(game_date)
     )
     if prior_starts < MIN_PRIOR_STARTS_FOR_STD:
         msg = (
@@ -166,7 +183,7 @@ def _validate_v5b_inputs(store: dict[str, Any], pitcher_id: Any, game_date: Any)
 
 def v5b_for_pitcher_night(store: dict[str, Any], pitcher_id: Any, game_date: Any, line: float,
                           v2_direction: str | None = None,
-                          thresholds: dict | None = None) -> EngineDistribution | None:
+                          thresholds: dict | None = None):
     """End-to-end: run V5B against the given store + inputs, return an EngineDistribution
     (or None if V5B abstained on this pitcher-night). Wrapper only — V5B is untouched.
 
@@ -184,10 +201,26 @@ def v5b_for_pitcher_night(store: dict[str, Any], pitcher_id: Any, game_date: Any
     return v5b_result_to_distribution(result, correlation_id=correlation_id)
 
 
+def v5b_result_for_pitcher_night(store: dict[str, Any], pitcher_id: Any, game_date: Any, line: float,
+                                 v2_direction: str | None = None,
+                                 thresholds: dict | None = None
+                                 ) -> dict[str, Any] | None:
+    """Raw V5B result dict, with wrapper's input guards applied. No EngineDistribution
+    wrapping, no dependency on trade_one.contracts — suitable for lightweight callers
+    like the Andromeda API (server.py) that only need k_projected + grade + components.
+
+    Returns None if V5B abstains. Rule-4: raises ValueError + ERROR log on missing
+    inputs rather than allowing V5B's internal silent defaults to fire.
+    """
+    _validate_v5b_inputs(store, pitcher_id, game_date)
+    return run_sbc_v5_for_pitcher_night(
+        store, pitcher_id, game_date, line, v2_direction=v2_direction, thresholds=thresholds,
+    )
+
+
 def v5b_for_pitcher_night_full(store: dict[str, Any], pitcher_id: Any, game_date: Any, line: float,
                                v2_direction: str | None = None,
-                               thresholds: dict | None = None
-                               ) -> tuple[EngineDistribution | None, dict[str, Any] | None]:
+                               thresholds: dict | None = None):
     """End-to-end + FULL result: returns (EngineDistribution, v5b_result_dict).
 
     The dict carries every field V5B produces — grade, l4_confirmed, direction, components,
