@@ -1,0 +1,37 @@
+{
+  "request_id": "example-live-001",
+  "mode": "live",
+  "sport": "baseball",
+  "league": "mlb",
+  "game_id": "mlb:example:001",
+  "as_of": "2026-07-31T23:42:10Z",
+  "event_start": "2026-07-31T23:10:00Z",
+  "state_revision": 18,
+  "market": {
+    "market_id": "book-a:pitcher-k-live:001",
+    "sportsbook": "book-a",
+    "market_family": "pitcher_strikeouts_remaining",
+    "period": "first_5",
+    "side": "over",
+    "line": 2.5,
+    "decimal_odds": 2.05,
+    "first_seen_at": "2026-07-31T23:42:00Z",
+    "observed_at": "2026-07-31T23:42:08Z",
+    "status": "open",
+    "settlement_rule_version": "book-a-2026-v1"
+  },
+  "numeric": {
+    "baseline_projection": 3.1,
+    "expected_batters_faced": 12.0,
+    "matchup_k_rate": 0.28,
+    "workload_multiplier": 0.94,
+    "projection_sd": 1.1,
+    "input_quality": 0.9,
+    "inning": 3,
+    "outs": 1
+  },
+  "history": [
+    {"canonical_sequence": 17, "event_type": "plate_appearance", "result": "strikeout"}
+  ]
+}
+

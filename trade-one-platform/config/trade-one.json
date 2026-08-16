@@ -1,0 +1,78 @@
+{
+  "contract_version": "1.0",
+  "components": {
+    "control": {
+      "factory": "trade_one.builtin:deterministic_control"
+    },
+    "sport.pregame": {
+      "factory": "trade_one.builtin:baseball_adapter"
+    },
+    "sport.live": {
+      "factory": "trade_one.builtin:baseball_adapter"
+    },
+    "formula.pregame": {
+      "factory": "trade_one.formula_sdk:python_formula",
+      "settings": {
+        "path": "plugins/formulas/baseball_strikeouts_template.py"
+      }
+    },
+    "formula.live": {
+      "factory": "trade_one.formula_sdk:python_formula",
+      "settings": {
+        "path": "plugins/formulas/baseball_strikeouts_template.py"
+      }
+    },
+    "brain.pregame": {
+      "factory": "trade_one.builtin:reference_distribution",
+      "settings": {
+        "formula_weight": 0.4,
+        "default_sd": 1.5
+      }
+    },
+    "brain.live": {
+      "factory": "trade_one.builtin:reference_distribution",
+      "settings": {
+        "formula_weight": 0.5,
+        "default_sd": 1.2
+      }
+    },
+    "market.pregame": {
+      "factory": "trade_one.builtin:quote_market"
+    },
+    "market.live": {
+      "factory": "trade_one.builtin:quote_market"
+    },
+    "calibrator.pregame": {
+      "factory": "trade_one.builtin:identity_calibrator"
+    },
+    "calibrator.live": {
+      "factory": "trade_one.builtin:identity_calibrator"
+    },
+    "grader.pregame": {
+      "factory": "trade_one.builtin:conservative_grader",
+      "settings": {
+        "minimum_edge": 0.04,
+        "watch_edge": 0.015,
+        "maximum_quote_age_seconds": 900
+      }
+    },
+    "grader.live": {
+      "factory": "trade_one.builtin:conservative_grader",
+      "settings": {
+        "minimum_edge": 0.05,
+        "watch_edge": 0.02,
+        "maximum_quote_age_seconds": 30
+      }
+    },
+    "repository.audit": {
+      "factory": "trade_one.builtin:jsonl_repository",
+      "settings": {
+        "path": "data/audit/intelligence.jsonl"
+      }
+    },
+    "delivery": {
+      "factory": "trade_one.builtin:null_delivery"
+    }
+  }
+}
+

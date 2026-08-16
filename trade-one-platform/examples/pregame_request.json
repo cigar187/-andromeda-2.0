@@ -1,0 +1,44 @@
+{
+  "request_id": "example-pregame-001",
+  "mode": "pregame",
+  "sport": "baseball",
+  "league": "mlb",
+  "game_id": "mlb:example:001",
+  "as_of": "2026-07-31T14:00:00Z",
+  "event_start": "2026-07-31T23:10:00Z",
+  "market": {
+    "market_id": "book-a:pitcher-k:001",
+    "sportsbook": "book-a",
+    "market_family": "pitcher_strikeouts",
+    "period": "full_game",
+    "side": "over",
+    "line": 5.5,
+    "decimal_odds": 1.91,
+    "first_seen_at": "2026-07-31T13:55:00Z",
+    "observed_at": "2026-07-31T13:59:30Z",
+    "status": "open",
+    "settlement_rule_version": "book-a-2026-v1"
+  },
+  "numeric": {
+    "baseline_projection": 6.1,
+    "expected_batters_faced": 24.0,
+    "matchup_k_rate": 0.265,
+    "workload_multiplier": 0.98,
+    "projection_sd": 1.55,
+    "input_quality": 0.84,
+    "estimated_overround": 0.045
+  },
+  "categorical": {
+    "starter_status": "confirmed",
+    "lineup_status": "projected"
+  },
+  "source_clocks": [
+    {
+      "provider": "example-sports-feed",
+      "provider_record_id": "starter-001",
+      "published_at": "2026-07-31T13:45:00Z",
+      "received_at": "2026-07-31T13:45:03Z"
+    }
+  ]
+}
+

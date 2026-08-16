@@ -1,0 +1,34 @@
+{
+  "cli": {
+    "version": ">= 5.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false,
+        "image": "macos-sequoia-15.5-xcode-26.0"
+      }
+    },
+    "production": {
+      "ios": {
+        "buildConfiguration": "Release",
+        "image": "macos-sequoia-15.5-xcode-26.0"
+      },
+      "env": {
+        "EXPO_PUBLIC_ANDROMEDA_API": "https://138-197-27-37.nip.io"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6760734873"
+      }
+    }
+  }
+}

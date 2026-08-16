@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "5thBase",
+    "slug": "fifthbase",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#060a0f",
+    "owner": "cigar187",
+    "ios": {
+      "bundleIdentifier": "com.fifthbase.app",
+      "buildNumber": "11",
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "cd58b7a3-6a21-41ca-abdc-ec5c0cdb5814"
+      }
+    }
+  }
+}

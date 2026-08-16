@@ -1,0 +1,27 @@
+{
+  "feeds": {
+    "mlb_schedule": {
+      "factory": "plugins.feeds.mlb_schedule:mlb_schedule",
+      "settings": {"lookahead_days": 3}
+    },
+    "nhl_schedule": {
+      "factory": "plugins.feeds.nhl_schedule:nhl_schedule",
+      "settings": {"lookahead_days": 3}
+    },
+    "mlb_news": {
+      "factory": "plugins.feeds.mlb_news:mlb_news",
+      "settings": {}
+    },
+    "rundown_props": {
+      "factory": "plugins.feeds.rundown_props:rundown_props",
+      "settings": {
+        "sports": ["mlb", "nfl"],
+        "market_ids": [19, 47, 766, 780, 1111, 1114, 1, 2, 3],
+        "base_url": "https://therundown.io/api/v2",
+        "api_key_env": "ANDROMEDA_RUNDOWN_KEY",
+        "auth_header": "X-TheRundown-Key",
+        "pinnacle_affiliate_id": 3
+      }
+    }
+  }
+}

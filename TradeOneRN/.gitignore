@@ -1,0 +1,35 @@
+# Node / Expo / Metro
+node_modules/
+.expo/
+.expo-shared/
+web-build/
+
+# iOS build artifacts (regenerable)
+ios/build/
+ios/Pods/
+ios/DerivedData/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Pre-Path-B ios/ backup (Step 4 rollback safety, not for git)
+ios.backup-pre-pathb/
+
+# Android build artifacts (if any)
+android/build/
+android/app/build/
+android/.gradle/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Env files (if any)
+.env
+.env.local
+.env.*.local
