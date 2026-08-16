@@ -5,18 +5,30 @@ projection + std and discretizes Normal(k_projected, std) onto integer K support
 using continuity correction, then renormalizes so the support-truncated distribution sums
 to 1.0.
 
-Absence is honest:
-- V5B returns None (csw_pct missing OR n_prior_starts < 2) -> wrapper returns None.
-- No flat/uniform fake distribution is ever fabricated (Rule 4).
+Absence is honest (Rule 4):
+- V5B abstains (csw_pct missing OR n_prior_starts < 2) -> wrapper returns None.
+- Missing required inputs at the CALLER layer (put_whiff, ip_baseline, insufficient
+  prior starts for a real std) -> wrapper RAISES with ERROR log rather than allowing
+  V5B's internal silent defaults (0.24 / 5.0 / DEFAULT_STD=2.2) to fire.
+- No flat/uniform fake distribution is ever fabricated.
 
 Engine identity carried to the EngineDistribution:
 - engine_id       = "sbc_v5b"
 - engine_version  = the CALIBRATION_LABEL constant published by sbc_engine_v5.py itself
                     (single source of truth — never invented here).
+
+Full V5B output preserved (Rule 4 / grade-signal integrity):
+- v5b_for_pitcher_night_full() returns a tuple (EngineDistribution|None, dict|None)
+  where the dict carries grade, l4_confirmed, direction, components, k_projected,
+  std, and adjustment. Callers that only need the distribution can use
+  v5b_for_pitcher_night(); callers that need grading (e.g. Andromeda card
+  assembler) must use the _full variant to avoid the earlier signal-drop bug
+  (grade/l4_confirmed/direction/components were being discarded).
 """
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -26,6 +38,14 @@ import sbc_engine_v5
 from sbc_engine_v5 import CALIBRATION_LABEL, run_sbc_v5_for_pitcher_night
 
 from trade_one.contracts import EngineDistribution
+
+log = logging.getLogger("sbc_v5_cwc_wrapper")
+
+# Minimum prior starts required for V5B to produce a real std from data. Below this
+# threshold sbc_engine_v5 silently falls back to DEFAULT_STD=2.2 (Rule-4 violation).
+# The wrapper enforces the same threshold sbc_engine_v5.py uses internally (>= 5)
+# and raises rather than allowing the substitute std through.
+MIN_PRIOR_STARTS_FOR_STD = 5
 
 
 ENGINE_ID = "sbc_v5b"
@@ -79,6 +99,10 @@ def v5b_result_to_distribution(v5b_result: dict[str, Any] | None,
 
     v5b_result is either the dict returned by run_sbc_v5_for_pitcher_night, or None (no-call).
     None in -> None out; no fake distribution is ever fabricated.
+
+    NOTE: this function returns ONLY the distribution. Grade/l4_confirmed/direction/
+    components are dropped by design here — call v5b_for_pitcher_night_full() when
+    those fields are needed downstream (e.g. card assembler / grader).
     """
     if v5b_result is None:
         return None
@@ -98,14 +122,86 @@ def v5b_result_to_distribution(v5b_result: dict[str, Any] | None,
     return dist
 
 
+def _validate_v5b_inputs(store: dict[str, Any], pitcher_id: Any, game_date: Any) -> None:
+    """Raise ValueError (with ERROR log) if the store lacks values V5B would silently
+    default. Rule-4: no fallbacks — a missing input is a hard failure, not a fabricated
+    substitute. Keeps sbc_engine_v5.py untouched (Rule-9) while blocking its internal
+    put_whiff->0.24 / ip_baseline->5.0 / std->2.2 defaults from ever firing.
+    """
+    profiles = store.get("profiles") if isinstance(store, dict) else None
+    if profiles is None:
+        msg = f"V5B input missing: store has no 'profiles' key (pitcher={pitcher_id!r}, date={game_date!r})"
+        log.error(msg)
+        raise ValueError(msg)
+    prof = profiles.get(pitcher_id) if isinstance(profiles, dict) else None
+    if prof is None:
+        msg = f"V5B input missing: no profile for pitcher_id={pitcher_id!r} (date={game_date!r})"
+        log.error(msg)
+        raise ValueError(msg)
+    if prof.get("put_whiff") is None:
+        msg = f"V5B input missing: put_whiff is None for pitcher_id={pitcher_id!r} (date={game_date!r})"
+        log.error(msg)
+        raise ValueError(msg)
+    if prof.get("ip_baseline") is None:
+        msg = f"V5B input missing: ip_baseline is None for pitcher_id={pitcher_id!r} (date={game_date!r})"
+        log.error(msg)
+        raise ValueError(msg)
+    history = store.get("history") if isinstance(store, dict) else None
+    hist_rows = history.get(pitcher_id, []) if isinstance(history, dict) else []
+    # V5B's own MIN_STARTS_FOR_STD is 5 (sbc_engine_v5.py:236). Below it, V5B substitutes
+    # DEFAULT_STD=2.2. Wrapper refuses rather than allow that substitution.
+    prior_starts = sum(
+        1 for r in hist_rows
+        if r.get("game_date") is not None and str(r["game_date"]) < str(game_date)
+    )
+    if prior_starts < MIN_PRIOR_STARTS_FOR_STD:
+        msg = (
+            f"V5B input insufficient: only {prior_starts} prior starts for pitcher_id={pitcher_id!r} "
+            f"before {game_date!r} (need >= {MIN_PRIOR_STARTS_FOR_STD} for a real std; "
+            f"V5B would otherwise substitute DEFAULT_STD=2.2 — Rule-4 refuses)"
+        )
+        log.error(msg)
+        raise ValueError(msg)
+
+
 def v5b_for_pitcher_night(store: dict[str, Any], pitcher_id: Any, game_date: Any, line: float,
                           v2_direction: str | None = None,
                           thresholds: dict | None = None) -> EngineDistribution | None:
     """End-to-end: run V5B against the given store + inputs, return an EngineDistribution
     (or None if V5B abstained on this pitcher-night). Wrapper only — V5B is untouched.
+
+    Rule-4: pre-flight validates required inputs and RAISES on missing values rather
+    than allowing V5B's silent internal defaults to substitute (see _validate_v5b_inputs).
+
+    NOTE: returns only the distribution. If you need grade/l4_confirmed/direction/
+    components (e.g. for card grading), use v5b_for_pitcher_night_full() instead.
     """
+    _validate_v5b_inputs(store, pitcher_id, game_date)
     result = run_sbc_v5_for_pitcher_night(
         store, pitcher_id, game_date, line, v2_direction=v2_direction, thresholds=thresholds,
     )
     correlation_id = f"{pitcher_id}:{game_date}" if result is not None else None
     return v5b_result_to_distribution(result, correlation_id=correlation_id)
+
+
+def v5b_for_pitcher_night_full(store: dict[str, Any], pitcher_id: Any, game_date: Any, line: float,
+                               v2_direction: str | None = None,
+                               thresholds: dict | None = None
+                               ) -> tuple[EngineDistribution | None, dict[str, Any] | None]:
+    """End-to-end + FULL result: returns (EngineDistribution, v5b_result_dict).
+
+    The dict carries every field V5B produces — grade, l4_confirmed, direction, components,
+    k_projected, std, adjustment, verdict, etc. — so callers (Andromeda card assembler,
+    grader, calibrator) can consume V5B's grade signal without the earlier drop bug.
+
+    Returns (None, None) when V5B abstains. Rule-4: validates inputs; raises on missing.
+    """
+    _validate_v5b_inputs(store, pitcher_id, game_date)
+    result = run_sbc_v5_for_pitcher_night(
+        store, pitcher_id, game_date, line, v2_direction=v2_direction, thresholds=thresholds,
+    )
+    if result is None:
+        return (None, None)
+    correlation_id = f"{pitcher_id}:{game_date}"
+    dist = v5b_result_to_distribution(result, correlation_id=correlation_id)
+    return (dist, result)
