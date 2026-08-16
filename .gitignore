@@ -43,3 +43,9 @@
 **/*credential*
 !**/*token*.py
 !**/*token*.md
+
+# Build artifacts + extracted zips + data dumps (root)
+*.zip
+/react_web_extracted/
+/ui_extracted/
+/data/
