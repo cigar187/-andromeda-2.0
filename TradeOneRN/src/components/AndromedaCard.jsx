@@ -155,7 +155,7 @@ export function AndromedaCard({ card, initiallyOpen }) {
 
       <View style={s.tiles}>
         <PropTile
-          label={card.v5bStatus === "ok" ? `K PROJ · V5B${card.v5bGrade ? " " + card.v5bGrade : ""}` : "K PROJ"}
+          label="K PROJ"
           value={typeof card.kProj === "number" ? card.kProj.toFixed(2) : "—"}
           sub={`line ${card.line}`}
           valueTone={isOver ? "pos" : "neg"}

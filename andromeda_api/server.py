@@ -420,11 +420,12 @@ def assemble_cards_for_sport(sport: str, date: str) -> list[dict]:
             v5b_grade = str(v5b_result.get("grade") or "")
             v5b_status = "ok"
 
-        # Lead: one-liner
-        proj_source = "V5B" if v5b_status == "ok" else "Market"
+        # Lead: one-liner. Customer-facing text — NEVER name the engine
+        # (V5B / model names / architecture) on the card. The engine source
+        # is internal-only; leaking it gives an attacker a target to reverse.
         lead = (
             f"Pinnacle no-vig **{side_prob:.0%}** on the {direction}. "
-            f"{proj_source} projection **{k_proj:.2f}** vs line {line}."
+            f"Projection **{k_proj:.2f}** vs line {line}."
         )
         # Brief: expandable plain-English. Customer-facing text ONLY — no engine
         # names, no model names, no internal architecture references. Describes
@@ -502,9 +503,11 @@ def assemble_cards_for_sport(sport: str, date: str) -> list[dict]:
             "regressionWarn": False,  # no data source yet
             "lead": lead,
             "kProj": k_proj,
-            "kProjSource": proj_source,      # "V5B" | "Market"
-            "v5bGrade": v5b_grade,           # A+ / A / B / C / D  (None when v5bStatus != "ok")
-            "v5bStatus": v5b_status,         # "ok" | "not_applicable" | "engine_offline"
+            # NOTE: engine identity + grade DELIBERATELY not exposed on the wire.
+            # Card is agnostic to the engine that produced kProj — anything
+            # naming the model here becomes a reverse-engineering target for
+            # anyone inspecting network traffic. Grade is tracked server-side
+            # only (audit log + internal ops). Never re-add these to the payload.
             "edgeScore": edge_score,
             "edgeBand": edge_band,
             "booksAgreeNum": num_agree,
