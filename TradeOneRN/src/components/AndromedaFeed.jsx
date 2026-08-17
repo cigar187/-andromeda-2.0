@@ -7,14 +7,13 @@ import { AndromedaCard } from "./AndromedaCard.jsx";
 import { M31Colors } from "../theme/m31.js";
 import { API_BASE_URL, API_TOKEN } from "../config/api.js";
 
-const SPORTS = ["Baseball", "Basketball", "Football", "Hockey", "Soccer"];
+const SPORTS = ["Baseball", "Basketball", "Football", "Hockey"];
 
 const SPORT_TO_SLUG = {
   Baseball: "mlb",
   Basketball: "nba",
   Football: "nfl",
   Hockey: "nhl",
-  Soccer: "mls",
 };
 
 function fmtDate(d = new Date()) {

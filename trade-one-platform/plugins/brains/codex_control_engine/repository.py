@@ -76,8 +76,8 @@ class CloudSqlRepository:
     def initialize_schema(self) -> None:
         """PRIVILEGED SETUP ONLY. Runs CREATE TABLE + CREATE INDEX from the
         module SCHEMA constant. Must be invoked once by a role with schema
-        ownership (e.g. axiom_user in the m31 DB). The runtime pull job
-        must NOT invoke this — it lacks (and must not need) DDL privileges.
+        ownership in the m31 DB. The runtime pull job must NOT invoke this —
+        it lacks (and must not need) DDL privileges.
         """
         from sqlalchemy import text
         with self.engine.begin() as connection:

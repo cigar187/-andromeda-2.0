@@ -240,7 +240,7 @@ def assemble_cards_for_sport(sport: str, date: str) -> list[dict]:
     # Rundown's /sports/3/events/<UTC_date> returns games with event_start between
     # UTC midnight–midnight, which straddles ET evening: e.g. yesterday's 8pm EDT
     # games (00:00 UTC today) come back on today's response. Pregame product mandate
-    # (project_axiom_purpose.md) says we don't show already-started games. The bus
+    # says we don't show already-started games. The bus
     # keeps every row (Rule 4 no-skip); the assembler chooses not to render games
     # whose event_start is in the past. Configurable grace window via env var.
     now_utc = datetime.now(timezone.utc)
